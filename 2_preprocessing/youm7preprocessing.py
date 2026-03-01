@@ -114,7 +114,7 @@ def process_scraped_data(response, output_file='preprocessing/output/processed_d
     }
 
     with open(output_file, 'a', encoding='utf-8') as f:
-        json.dump(result, f, ensure_ascii=False, indent=4)
+        json.dump(result, f, ensure_ascii=False) 
         f.write('\n')
 
     return result
@@ -134,4 +134,4 @@ def process_scraped_json(json_file, output_file='preprocessing/output/processed_
                 print(f"Successfully processed: {url}")
 
 if __name__ == "__main__":
-    process_scraped_json('data_collection/datacollection1/output/scrap.json', output_file='preprocessing/output/processed_youm7_data.json')
+    process_scraped_json('1_data_collection/datacollection1/output/scrap.json', output_file='2_preprocessing/output/processed_youm7_data.json')
