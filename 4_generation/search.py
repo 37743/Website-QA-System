@@ -76,6 +76,5 @@ if __name__ == "__main__":
     
     faiss_index, text_chunks = build_faiss_index(input_file)
     
-    # Test
-    test_query = "الحرب في إيران"
+    test_query = "إسرائيل و إيران"
     search(test_query, faiss_index, text_chunks, top_k=3)

@@ -8,3 +8,19 @@
 pyvenv.cfg
 .venv
 pip-selfcheck.json
+# ignore virtual environment directories
+__pycache__/
+*.pyc
+*.pyo
+# ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# ignore output files
+4_generation/output/
+3_embedding/output/
+2_preprocessing/output/
+1_data_collection/output/
+
+# ignore API keys
+hf_token.txt
+g_token.txt
