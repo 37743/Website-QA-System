@@ -1,10 +1,15 @@
 import json
+import os
+import sys
 import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModel
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from load_config import get_config
 
-# Options: "asafaya/bert-mini-arabic", "asafaya/albert-base-arabic", "Geotrend/distilbert-base-ar-cased"
-MODEL_NAME = "asafaya/albert-base-arabic"
+config = get_config()
+
+MODEL_NAME = config['model']['embed_model']
 
 print(f"Loading tokenizer and model for {MODEL_NAME}...")
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -19,7 +24,7 @@ def mean_pooling(model_output, attention_mask):
     return sum_embeddings / sum_mask
 
 def get_bert_embedding(text):
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=int(config['embedding']['max_length']), chunk_size=int(config['embedding']['chunk_size']))
     
     with torch.no_grad():
         outputs = model(**inputs)
@@ -54,8 +59,8 @@ def process_embeddings(input_json, output_json):
             outfile.write('\n')
 
 if __name__ == "__main__":
-    input_file = '2_preprocessing/output/processed_youm7_data.json'
-    output_file = '3_embedding/output/embedded_youm7_data.json'
+    input_file = 'preprocessing/output/processed_data.json'
+    output_file = 'embedding/output/embedded_data.json'
     
     process_embeddings(input_file, output_file)
     print("Embeddings saved.")

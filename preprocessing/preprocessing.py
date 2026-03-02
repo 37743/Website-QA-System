@@ -134,4 +134,4 @@ def process_scraped_json(json_file, output_file='preprocessing/output/processed_
                 print(f"Successfully processed: {url}")
 
 if __name__ == "__main__":
-    process_scraped_json('1_data_collection/datacollection1/output/scrap.json', output_file='2_preprocessing/output/processed_youm7_data.json')
+    process_scraped_json('data_collection/datacollection1/output/scrap.json', output_file='preprocessing/output/processed_data.json')
