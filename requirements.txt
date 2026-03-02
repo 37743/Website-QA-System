@@ -1,0 +1,25 @@
+# Data Collection
+beautifulsoup4
+scrapy
+
+# Web Framework & Server
+fastapi
+uvicorn
+pydantic
+requests
+
+# AI & LLM
+groq
+transformers
+torch
+sentence-transformers
+numpy
+
+# Vector Database
+faiss-cpu
+
+# UI
+streamlit
+
+# Utils
+python-dotenv
