@@ -24,3 +24,6 @@ __pycache__/
 # ignore API keys
 hf_token.txt
 g_token.txt
+
+# E-JUST credentials for project submission to T.A.
+NOTE FOR T.A. (GUIDE TO RUN).txt
