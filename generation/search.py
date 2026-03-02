@@ -1,18 +1,24 @@
 import json
+import os
+import sys
 import numpy as np
 import faiss
 import torch
 from transformers import AutoTokenizer, AutoModel
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from load_config import get_config
+
+config = get_config()
 
 # DISCLAIMER: Load the exact same model used for embedding
-MODEL_NAME = "asafaya/albert-base-arabic"
+MODEL_NAME = config['model']['embed_model']
 print("Loading model and tokenizer...")
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModel.from_pretrained(MODEL_NAME)
 
 def get_query_embedding(text):
     """Embeds the user's search query using ALBERT."""
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=int(config['embedding']['max_length']))
     with torch.no_grad():
         outputs = model(**inputs)
     cls_embedding = outputs.last_hidden_state[:, 0, :]
@@ -51,7 +57,7 @@ def build_faiss_index(jsonl_file):
     
     return index, all_chunks
 
-def search(query, index, chunks, top_k=3):
+def search(query, index, chunks, top_k=int(config['search']['top_k'])):
     print(f"\nSearching for: '{query}'...")
     
     query_vector = get_query_embedding(query)
@@ -65,16 +71,15 @@ def search(query, index, chunks, top_k=3):
         idx = indices[0][i]
         dist = distances[0][i]
         
-        # Save into a file
-        with open('4_generation/output/search_results.txt', 'a', encoding='utf-8') as f:
+        with open('generation/output/search_results.txt', 'a', encoding='utf-8') as f:
             f.write(f"Query: {query}\n")
             f.write(f"Result {i+1} (Distance: {dist:.4f}):\n{chunks[idx]}\n")
             f.write("-" * 50 + "\n")
 
 if __name__ == "__main__":
-    input_file = '3_embedding/output/embedded_youm7_data.json'
+    input_file = 'embedding/output/embedded_data.json'
     
     faiss_index, text_chunks = build_faiss_index(input_file)
     
     test_query = "إسرائيل و إيران"
-    search(test_query, faiss_index, text_chunks, top_k=3)
+    search(test_query, faiss_index, text_chunks, top_k=10)

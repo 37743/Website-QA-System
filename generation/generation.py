@@ -1,17 +1,23 @@
 import torch
+import os
+import sys
 import numpy as np
 from transformers import AutoModel, AutoTokenizer, AutoModelForCausalLM, pipeline
-from search import build_faiss_index
+from generation.search import build_faiss_index
 from groq import Groq
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from load_config import get_config
 
-EMBED_MODEL = "asafaya/albert-base-arabic"
+config = get_config()
 
-# LLM_ID = "meta-llama/Llama-3.1-8B-Instruct"
-# with open('4_generation/hf_token.txt', 'r') as f:
+EMBED_MODEL = config['model']['embed_model']
+
+# LLM_ID = config['model']['hf_model']
+# with open('generation/hf_token.txt', 'r') as f:
 #     HF_TOKEN = f.read().strip()
 
-GROQ_MODEL = "llama-3.1-8b-instant"
-with open('4_generation/g_token.txt', 'r') as f:
+GROQ_MODEL = config['model']['groq_model']
+with open('generation/g_token.txt', 'r') as f:
     G_TOKEN = f.read().strip()
 
 # print("Loading Llama 3.1 8B...")
@@ -25,17 +31,17 @@ with open('4_generation/g_token.txt', 'r') as f:
 
 client = Groq(api_key=G_TOKEN)
 
-print("Loading ALBERT model and tokenizer for embedding...")
 embed_tokenizer = AutoTokenizer.from_pretrained(EMBED_MODEL)
 embed_model = AutoModel.from_pretrained(EMBED_MODEL)
 
 def get_query_embedding(text):
-    inputs = embed_tokenizer(text, return_tensors="pt", truncation=True, padding=True)
+    inputs = embed_tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=int(config['embedding']['max_length']))
     with torch.no_grad():
-        out = embed_model(**inputs)
-    mask = inputs['attention_mask'].unsqueeze(-1).expand(out.last_hidden_state.size()).float()
-    pooled = torch.sum(out.last_hidden_state * mask, 1) / torch.clamp(mask.sum(1), min=1e-9)
-    return torch.nn.functional.normalize(pooled, p=2, dim=1).squeeze().numpy().astype('float32')
+        outputs = embed_model(**inputs)
+    
+    cls_embedding = outputs.last_hidden_state[:, 0, :]
+    
+    return cls_embedding.squeeze().numpy().astype('float32')
 
 # def run_rag(query, index, chunks):
 #     vec = np.expand_dims(get_query_embedding(query), axis=0)
@@ -57,7 +63,8 @@ def get_query_embedding(text):
 
 def run_rag_groq(query, index, chunks):
     vec = np.expand_dims(get_query_embedding(query), axis=0)
-    scores, indices = index.search(vec, 3)
+
+    scores, indices = index.search(vec, 10) 
     context = "\n\n".join([chunks[i] for i in indices[0]])
 
     print("Generating answer with Groq...")
@@ -77,9 +84,9 @@ def run_rag_groq(query, index, chunks):
     return completion.choices[0].message.content
 
 if __name__ == "__main__":
-    input_file = '3_embedding/output/embedded_youm7_data.json'
+    input_file = 'embedding/output/embedded_data.json'
     faiss_index, text_chunks = build_faiss_index(input_file)
     # answer = run_rag("ما هي أخبار الحرب في إيران؟", faiss_index, text_chunks)
-    answer = run_rag_groq("ما أخبار الكرة المصرية؟", faiss_index, text_chunks)
-    with open('4_generation/output/answer.txt', 'w', encoding='utf-8') as f:
+    answer = run_rag_groq("ما اخبار الحرب في إيران؟", faiss_index, text_chunks)
+    with open('generation/output/answer.txt', 'w', encoding='utf-8') as f:
         f.write(answer if answer is not None else "")
