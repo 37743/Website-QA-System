@@ -124,7 +124,7 @@ header, footer {{
 }}
 
 /* =========================================
-   RTL CONFIGURATION (ARABIC FIXES)
+   RTL CONFIGURATION
 ========================================= */
 .stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span {{
     direction: rtl !important;
@@ -172,9 +172,6 @@ header, footer {{
     box-shadow: 0 4px 15px rgba(239, 68, 68, 0.2) !important;
 }}
 
-/* =========================================
-   FORCE TEXT COLORS TO BLACK (KEEP LINKS COLORED)
-========================================= */
 [data-testid="stChatMessage"] {{
     color: #000000 !important;
 }}
@@ -200,7 +197,7 @@ header, footer {{
 }}
 
 /* =========================================
-   BULLET POINTS AS COLORED RECTANGLES
+   BULLET POINTS
 ========================================= */
 [data-testid="stChatMessage"] .stMarkdown ul {{
     list-style-type: none !important; 
@@ -220,7 +217,7 @@ header, footer {{
 }}
 
 /* =========================================
-   INPUT & LAYOUT FIXES
+   INPUT & LAYOUT STYLES
 ========================================= */
 [data-testid="stBottom"], 
 [data-testid="stBottomBlock"], 
@@ -273,7 +270,7 @@ textarea[aria-label="اسأل عن أي مباراة..."]::placeholder {{
 }}
 
 /* =========================================
-   CUSTOM EXPANDER STYLES (NO DARK BACKGROUND)
+   CUSTOM EXPANDER STYLES
 ========================================= */
 [data-testid="stExpander"] {{
     background-color: transparent !important;
@@ -310,9 +307,7 @@ st.markdown(f"""
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Persist messages AND their specific sources on re-render
 for message in st.session_state.messages:
-    # Set the correct avatar on re-render
     avatar_img = user_avatar if message["role"] == "user" else bot_avatar
     
     with st.chat_message(message["role"], avatar=avatar_img):
@@ -327,11 +322,9 @@ prompt = st.chat_input("اسأل عن أي مباراة...")
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # Render user message with the new avatar
     with st.chat_message("user", avatar=user_avatar):
         st.markdown(prompt)
 
-    # Render assistant message with the new avatar
     with st.chat_message("assistant", avatar=bot_avatar):
         with st.spinner("جارٍ التحليل... ⚽"):
             try:
@@ -344,28 +337,23 @@ if prompt:
                     data = response.json()
                     raw_answer = data["answer"]
                     
-                    # 1. Regex to extract only the URLs present in the LLM's response
                     extracted_urls = re.findall(r'(https?://[^\s]+)', raw_answer)
                     
-                    # Clean trailing punctuation from URLs and remove duplicates
                     cleaned_urls = list(dict.fromkeys([u.rstrip('.,")') for u in extracted_urls]))
 
-                    # 2. Slice off the LLM's "المصادر:" block to keep the chat bubble clean
                     clean_answer = re.split(r'\*?\*?المصادر:\*?\*?', raw_answer)[0].strip()
 
                     st.markdown(clean_answer)
 
-                    # 3. Only display the expander if the LLM successfully cited sources
                     if cleaned_urls:
                         with st.expander("📚 المصادر المذكورة"):
                             for url in cleaned_urls:
-                                # Render as clickable Markdown links
                                 st.markdown(f"- [{url}]({url})")
 
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": clean_answer,
-                        "urls": cleaned_urls # Store URLs to persist across renders
+                        "urls": cleaned_urls
                     })
 
                 else:
