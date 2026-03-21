@@ -11,3 +11,10 @@ def get_config():
     config = configparser.ConfigParser()
     config.read(config_path, encoding='utf-8')
     return config
+
+def save_config(config):
+    root_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(root_dir, 'settings.cfg')
+    
+    with open(config_path, 'w', encoding='utf-8') as configfile:
+        config.write(configfile)

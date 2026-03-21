@@ -1,85 +1,173 @@
 import json
 import os
 import sys
-import numpy as np
-import faiss
-import torch
-from transformers import AutoTokenizer, AutoModel
+import re
+from rank_bm25 import BM25Okapi
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from load_config import get_config
 
 config = get_config()
 
-# DISCLAIMER: Load the exact same model used for embedding
-MODEL_NAME = config['model']['embed_model']
-print("Loading model and tokenizer...")
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModel.from_pretrained(MODEL_NAME)
+print("Loading BM25 search...")
 
-def get_query_embedding(text):
-    """Embeds the user's search query using ALBERT."""
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=int(config['embedding']['max_length']))
-    with torch.no_grad():
-        outputs = model(**inputs)
-    cls_embedding = outputs.last_hidden_state[:, 0, :]
-    
-    return cls_embedding.squeeze().numpy().astype('float32')
+# -----------------------------
+# SIMPLE ARABIC NORMALIZATION
+# -----------------------------
+def normalize_ar(text):
+    if not text:
+        return ""
+    text = text.lower()
+    text = text.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+    text = text.replace("ة", "ه")
+    text = text.replace("ى", "ي")
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
-def build_faiss_index(jsonl_file):
-    print("Loading embeddings from disk...")
-    
-    all_chunks = []
-    all_embeddings = []
-    
+
+# -----------------------------
+# TOKENIZATION
+# -----------------------------
+def tokenize(text):
+    return normalize_ar(text).split()
+
+
+# -----------------------------
+# LOAD DATA + BUILD BM25
+# -----------------------------
+def build_bm25_index(jsonl_file):
+    print("Loading match data...")
+
+    texts = []
+    metadata = []
+    tokenized_corpus = []
+
     with open(jsonl_file, 'r', encoding='utf-8') as f:
         for line in f:
             if not line.strip():
                 continue
-            
+
             data = json.loads(line)
-            chunks = data.get('text_chunks', [])
-            embeddings = data.get('chunk_embeddings', [])
-            
-            if len(chunks) == len(embeddings):
-                all_chunks.extend(chunks)
-                all_embeddings.extend(embeddings)
 
-    print(f"Loaded {len(all_chunks)} total text chunks.")
-    
-    embeddings_matrix = np.array(all_embeddings).astype('float32')
-    
-    dimension = embeddings_matrix.shape[1] 
-    
-    index = faiss.IndexFlatL2(dimension)
-    
-    index.add(embeddings_matrix) # type: ignore
-    print(f"Successfully built FAISS index with {index.ntotal} vectors.")
-    
-    return index, all_chunks
+            text = data.get("text", "")
+            tokens = tokenize(text)
 
-def search(query, index, chunks, top_k=int(config['search']['top_k'])):
-    print(f"\nSearching for: '{query}'...")
-    
-    query_vector = get_query_embedding(query)
-    
-    query_vector = np.expand_dims(query_vector, axis=0)
-    
-    distances, indices = index.search(query_vector, top_k)
-    
-    print("-" * 50)
-    for i in range(top_k):
-        idx = indices[0][i]
-        dist = distances[0][i]
-        
-        with open('generation/output/search_results.txt', 'a', encoding='utf-8') as f:
-            f.write(f"Query: {query}\n")
-            f.write(f"Result {i+1} (Distance: {dist:.4f}):\n{chunks[idx]}\n")
-            f.write("-" * 50 + "\n")
+            texts.append(text)
+            tokenized_corpus.append(tokens)
 
+            metadata.append({
+                "team_a": data.get("team_a"),
+                "team_b": data.get("team_b"),
+                "score_a": data.get("score_a"),
+                "score_b": data.get("score_b"),
+                "date": data.get("date"),
+                "time": data.get("time"),
+                "url": data.get("url")
+            })
+
+    bm25 = BM25Okapi(tokenized_corpus)
+
+    print(f"Loaded {len(texts)} matches into BM25.")
+
+    return bm25, texts, metadata
+
+
+# -----------------------------
+# SEARCH (OLD STYLE, NO FILTERS)
+# -----------------------------
+def search(query, bm25, texts, metadata, top_k=5):
+    print(f"\n🔍 Query: {query}")
+
+    tokenized_query = tokenize(query)
+    scores = bm25.get_scores(tokenized_query)
+
+    ranked_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+
+    output_path = os.path.join("generation", "output")
+    os.makedirs(output_path, exist_ok=True)
+
+    output_file = os.path.join(output_path, "search_results.txt")
+
+    results = []
+
+    with open(output_file, 'a', encoding='utf-8') as f:
+        f.write(f"\n\nQUERY: {query}\n")
+        f.write("=" * 60 + "\n")
+
+        for rank, idx in enumerate(ranked_indices[:top_k], start=1):
+            score = scores[idx]
+
+            result = {
+                "rank": rank,
+                "score": float(score),
+                "team_a": metadata[idx]["team_a"],
+                "team_b": metadata[idx]["team_b"],
+                "score_a": metadata[idx]["score_a"],
+                "score_b": metadata[idx]["score_b"],
+                "date": metadata[idx]["date"],
+                "time": metadata[idx]["time"],
+                "details": texts[idx],
+                "url": metadata[idx]["url"]
+            }
+            results.append(result)
+
+            result_text = f"""
+Result {rank} (Score: {score:.4f})
+Teams: {metadata[idx]['team_a']} vs {metadata[idx]['team_b']}
+Score: {metadata[idx]['score_a']}-{metadata[idx]['score_b']}
+Date: {metadata[idx]['date']}
+Time: {metadata[idx]['time']}
+Details: {texts[idx]}
+URL: {metadata[idx]['url']}
+------------------------------------------------------------
+"""
+
+            print(result_text)
+            f.write(result_text)
+
+    return results
+
+
+# -----------------------------
+# BUILD CONTEXT FOR GENERATION
+# -----------------------------
+def build_context(results, max_chars=8000):
+    context_parts = []
+
+    for r in results:
+        block = f"""مباراة رقم {r['rank']}:
+الفريقان: {r['team_a']} ضد {r['team_b']}
+النتيجة: {r['score_a']}-{r['score_b']}
+التاريخ: {r['date']}
+الوقت: {r['time']}
+التفاصيل الكاملة: {r['details']}
+الرابط: {r['url']}
+-------------------------
+"""
+        context_parts.append(block)
+
+    context = "\n".join(context_parts)
+
+    if len(context) > max_chars:
+        context = context[:max_chars]
+
+    return context
+
+
+# -----------------------------
+# MAIN
+# -----------------------------
 if __name__ == "__main__":
-    input_file = 'embedding/output/embedded_data.json'
-    
-    faiss_index, text_chunks = build_faiss_index(input_file)
-    
-    test_query = "إسرائيل و إيران"
-    search(test_query, faiss_index, text_chunks, top_k=10)
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+    input_file = os.path.join(base_dir, 'embedding', 'output', 'embedded_data.json')
+
+    bm25, texts, metadata = build_bm25_index(input_file)
+
+    results = search("مباراة الأهلي", bm25, texts, metadata, top_k=5)
+
+    context = build_context(results)
+
+    print("\nGenerated Context:\n")
+    print(context)

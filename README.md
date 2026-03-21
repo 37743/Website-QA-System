@@ -1,4 +1,4 @@
-<div align="center">
+<!-- <div align="center">
   
 [![LATEST](https://img.shields.io/badge/Based_on_Youm7_News_Portal-990000?style=for-the-badge&label=RAG&labelColor=FFFFFF&logoColor=990000)](https://www.youm7.com/)
 
@@ -18,7 +18,7 @@ This system processes large-scale Arabic news data through a multi-stage pipelin
 
 ### Initialize Backend
 ```bash
-python main.py
+python api.py
 ```
 
 ### Launch UI
@@ -40,4 +40,4 @@ Then enter any Arabic news query. The system will retrieve the top relevant chun
 ### Project Contributors
 - @37743 - Yousef Gomaa
 
-[^1]: Developed for E-JUST Natural Language Processing Course - 2026
+[^1]: Developed for E-JUST Natural Language Processing Course - 2026 -->
