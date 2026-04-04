@@ -11,9 +11,6 @@ config = get_config()
 
 print("Loading BM25 search...")
 
-# -----------------------------
-# SIMPLE ARABIC NORMALIZATION
-# -----------------------------
 def normalize_ar(text):
     if not text:
         return ""
@@ -25,17 +22,9 @@ def normalize_ar(text):
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
-
-# -----------------------------
-# TOKENIZATION
-# -----------------------------
 def tokenize(text):
     return normalize_ar(text).split()
 
-
-# -----------------------------
-# LOAD DATA + BUILD BM25
-# -----------------------------
 def build_bm25_index(jsonl_file):
     print("Loading match data...")
 
@@ -72,10 +61,6 @@ def build_bm25_index(jsonl_file):
 
     return bm25, texts, metadata
 
-
-# -----------------------------
-# SEARCH (OLD STYLE, NO FILTERS)
-# -----------------------------
 def search(query, bm25, texts, metadata, top_k=5):
     print(f"\n🔍 Query: {query}")
 
@@ -128,10 +113,6 @@ URL: {metadata[idx]['url']}
 
     return results
 
-
-# -----------------------------
-# BUILD CONTEXT FOR GENERATION
-# -----------------------------
 def build_context(results, max_chars=8000):
     context_parts = []
 
@@ -154,10 +135,6 @@ def build_context(results, max_chars=8000):
 
     return context
 
-
-# -----------------------------
-# MAIN
-# -----------------------------
 if __name__ == "__main__":
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
