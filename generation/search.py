@@ -48,30 +48,47 @@ def build_bm25_index(jsonl_file):
             metadata.append({
                 "team_a": data.get("team_a"),
                 "team_b": data.get("team_b"),
-                "score_a": data.get("score_a"),
-                "score_b": data.get("score_b"),
+                "score_a": data.get("score_a", data.get("score_total", "").split("-")[0] if "-" in data.get("score_total", "") else ""),
+                "score_b": data.get("score_b", data.get("score_total", "").split("-")[1] if "-" in data.get("score_total", "") else ""),
                 "date": data.get("date"),
-                "time": data.get("time"),
+                "time": data.get("time", "N/A"),
                 "url": data.get("url")
             })
 
-    bm25 = BM25Okapi(tokenized_corpus)
+    bm25 = BM25Okapi(tokenized_corpus, b=0.25)
 
     print(f"Loaded {len(texts)} matches into BM25.")
 
     return bm25, texts, metadata
 
-def search(query, bm25, texts, metadata, top_k=5):
+def search(query, bm25, texts, metadata, min_k=1, max_k=10, score_threshold_ratio=0.6):
     print(f"\n🔍 Query: {query}")
 
     tokenized_query = tokenize(query)
     scores = bm25.get_scores(tokenized_query)
 
     ranked_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+    
+    if not ranked_indices or scores[ranked_indices[0]] == 0:
+        print("No matches found.")
+        return []
+
+    # FIX 2: Dynamic K Implementation
+    top_score = scores[ranked_indices[0]]
+    dynamic_k = min_k
+    
+    # Iterate to find how many results stay within the acceptable score drop-off
+    for i in range(min_k, min(len(ranked_indices), max_k)):
+        # Keep results that are at least 'score_threshold_ratio' (e.g., 60%) of the top score
+        if scores[ranked_indices[i]] >= (top_score * score_threshold_ratio):
+            dynamic_k += 1
+        else:
+            break
+
+    print(f"Dynamic K selected {dynamic_k} result(s) based on score drop-off.")
 
     output_path = os.path.join("generation", "output")
     os.makedirs(output_path, exist_ok=True)
-
     output_file = os.path.join(output_path, "search_results.txt")
 
     results = []
@@ -80,7 +97,7 @@ def search(query, bm25, texts, metadata, top_k=5):
         f.write(f"\n\nQUERY: {query}\n")
         f.write("=" * 60 + "\n")
 
-        for rank, idx in enumerate(ranked_indices[:top_k], start=1):
+        for rank, idx in enumerate(ranked_indices[:dynamic_k], start=1):
             score = scores[idx]
 
             result = {
@@ -107,7 +124,6 @@ Details: {texts[idx]}
 URL: {metadata[idx]['url']}
 ------------------------------------------------------------
 """
-
             print(result_text)
             f.write(result_text)
 
@@ -137,12 +153,11 @@ def build_context(results, max_chars=8000):
 
 if __name__ == "__main__":
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-
     input_file = os.path.join(base_dir, 'embedding', 'output', 'embedded_data.json')
 
     bm25, texts, metadata = build_bm25_index(input_file)
 
-    results = search("مباراة الأهلي", bm25, texts, metadata, top_k=5)
+    results = search("مباراة في الدوري المصري (الجولة5) بين الزمالك و الأهلي.", bm25, texts, metadata, min_k=1, max_k=5, score_threshold_ratio=0.6)
 
     context = build_context(results)
 

@@ -7,6 +7,10 @@ from transformers import AutoTokenizer, AutoModel
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from load_config import get_config
+from huggingface_hub import login
+
+hf_token = os.environ.get("HF_TOKEN")
+login(token=hf_token)
 
 config = get_config()
 
@@ -22,8 +26,10 @@ def mean_pooling(model_output, attention_mask):
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
 def get_embedding(text):
+    e5_text = f"passage: {text}"
+    
     inputs = tokenizer(
-        text,
+        e5_text,
         return_tensors="pt",
         truncation=True,
         padding=True,
@@ -39,13 +45,12 @@ def get_embedding(text):
     return embedding.squeeze().tolist()
 
 def build_match_text(match):
-    # Mapping the specific keys from your JSON structure
     team_a = match.get("team_a", "فريق أ")
     team_b = match.get("team_b", "فريق ب")
     score_a = match.get("score_a", "0")
     score_b = match.get("score_b", "0")
-    date = match.get("page_date", "") # Changed from 'date'
-    time = match.get("page_time", "") # Changed from 'time'
+    date = match.get("page_date", "")
+    time = match.get("page_time", "")
     competition = match.get("competition", "")
     round_name = match.get("round", "")
 
@@ -75,14 +80,13 @@ def build_match_text(match):
             stat_summary.append(f"{key} ({val.get('team_a')} - {val.get('team_b')})")
         parts.append("إحصائيات (فريق أ - فريق ب): " + " | ".join(stat_summary) + ".")
 
-    # Processing Events (Handling the 'description' field)
     events = match.get("events", [])
     if events:
         event_descriptions = []
         for e in events:
             desc = e.get("description", "").strip()
             minute = e.get("minute", "")
-            if desc: # Skip empty descriptions (like referees at 0')
+            if desc:
                 event_descriptions.append(f"دقيقة {minute}: {desc}")
         
         if event_descriptions:
@@ -93,10 +97,9 @@ def build_match_text(match):
 def process_embeddings(input_json, output_json):
     print("Generating embeddings...")
     
-    # Load data - handling potential list or single object
     with open(input_json, 'r', encoding='utf-8') as infile:
         data = json.load(infile)
-        if isinstance(data, dict): # If the file is a single object, wrap in list
+        if isinstance(data, dict):
             data = [data]
 
     with open(output_json, 'w', encoding='utf-8') as outfile:

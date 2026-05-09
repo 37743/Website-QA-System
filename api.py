@@ -12,17 +12,20 @@ from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-# Adjust paths to import your local modules
+from sentence_transformers import SentenceTransformer
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from load_config import get_config, save_config
 from embedding.embedding import process_embeddings 
-from generation.generation import run_rag_groq, retrieve_candidates, build_bm25_index
+from generation.generation import run_rag_groq, retrieve_candidates_hybrid, build_hybrid_index
 
 config = get_config()
 GROQ_MODEL = config['model']['groq_model']
 
 bm25 = None
+doc_embeddings = None
 metadata = None
+embedding_model = None
 
 app = FastAPI(title="E-JUST Sport AI RAG API")
 
@@ -47,22 +50,28 @@ def read_root():
     return {
         "status": "online",
         "llm_model": GROQ_MODEL,
-        "retrieval": "BM25"
+        "retrieval": "Hybrid (BM25 + E5 Dense)"
     }
 
 @app.post("/query", response_model=QueryResponse)
 async def ask_question(request: QueryRequest):
-    global bm25, metadata
+    global bm25, doc_embeddings, metadata, embedding_model
     
-    if bm25 is None or metadata is None:
+    if bm25 is None or metadata is None or doc_embeddings is None or embedding_model is None:
         raise HTTPException(
             status_code=503, 
             detail="The API is currently building or updating the search index. Please try again in a moment."
         )
 
     try:
-        results = retrieve_candidates(request.query, bm25, metadata, top_k=10)
-        answer = run_rag_groq(request.query, bm25, metadata)
+        results = retrieve_candidates_hybrid(
+            request.query, bm25, doc_embeddings, metadata, embedding_model, 
+            min_k=1, max_k=5, score_threshold_ratio=0.6
+        )
+        
+        answer = run_rag_groq(
+            request.query, bm25, doc_embeddings, metadata, embedding_model
+        )
 
         sources = list({
             r.get("url") for r in results if r.get("url")
@@ -114,7 +123,7 @@ if __name__ == "__main__":
     output_file = os.path.join(base_dir, 'embedding', 'output', 'embedded_data.json')
 
     last_updated_str = config.get('system', 'last_updated', fallback='2026-03-19')
-    system_time_str = config.get('system', 'system_time', fallback='2026-03-21')
+    system_time_str = datetime.now().strftime("%Y-%m-%d")
 
     last_updated = datetime.strptime(last_updated_str, "%Y-%m-%d")
     system_time = datetime.strptime(system_time_str, "%Y-%m-%d")
@@ -155,9 +164,12 @@ if __name__ == "__main__":
     else:
         print(f"Data is up to date (last scraped up to {last_updated_str}). Skipping scraping and embedding.")
 
-    print("Building BM25 Index for API...")
+    print("Loading Embedding Model...")
+    embedding_model = SentenceTransformer('intfloat/multilingual-e5-base')
+
+    print("Building Hybrid Index for API...")
     if os.path.exists(output_file):
-        bm25, metadata = build_bm25_index(output_file)
+        bm25, doc_embeddings, metadata = build_hybrid_index(output_file)
         print("Index built successfully.")
     else:
         print(f"Warning: Embedding file not found at {output_file}. Index is empty.")

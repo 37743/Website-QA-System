@@ -1,10 +1,12 @@
 import json
 import os
 import sys
+import re
+import numpy as np
 from rank_bm25 import BM25Okapi
+from sentence_transformers import SentenceTransformer
 from groq import Groq
 from datetime import datetime
-import re
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from load_config import get_config
@@ -34,12 +36,13 @@ def tokenize(text):
     return normalize_ar(text).split()
 
 
-def build_bm25_index(jsonl_file):
-    print("Loading BM25 index...")
+def build_hybrid_index(jsonl_file):
+    print("Loading Hybrid Index (BM25 + Dense Embeddings)...")
 
     texts = []
     metadata = []
     tokenized_corpus = []
+    embeddings = []
 
     with open(jsonl_file, 'r', encoding='utf-8') as f:
         for line in f:
@@ -53,41 +56,90 @@ def build_bm25_index(jsonl_file):
 
             texts.append(text)
             tokenized_corpus.append(tokens)
+            
+            embeddings.append(data.get("embedding", []))
 
             metadata.append({
                 "team_a": data.get("team_a"),
                 "team_b": data.get("team_b"),
-                "score_a": data.get("score_a"),
-                "score_b": data.get("score_b"),
+                "score_a": data.get("score_a", data.get("score_total", "").split("-")[0] if "-" in data.get("score_total", "") else ""),
+                "score_b": data.get("score_b", data.get("score_total", "").split("-")[1] if "-" in data.get("score_total", "") else ""),
                 "date": data.get("date"),
                 "time": data.get("time"),
                 "url": data.get("url"),
                 "text": text
             })
 
-    bm25 = BM25Okapi(tokenized_corpus)
+    bm25 = BM25Okapi(tokenized_corpus, b=0.25)
+    doc_embeddings = np.array(embeddings, dtype=np.float32)
 
-    print(f"Loaded {len(texts)} matches into BM25.")
+    print(f"Loaded {len(texts)} matches into Hybrid Index.")
 
-    return bm25, metadata
+    return bm25, doc_embeddings, metadata
 
-def retrieve_candidates(query, bm25, metadata, top_k=15):
+def retrieve_candidates_hybrid(query, bm25, doc_embeddings, metadata, embedding_model, min_k=3, max_k=10, score_threshold_ratio=0.70, alpha=0.25):
     tokenized_query = tokenize(query)
-    scores = bm25.get_scores(tokenized_query)
+    bm25_scores = np.array(bm25.get_scores(tokenized_query))
+    
+    e5_query = f"query: {query}"
+    query_embedding = embedding_model.encode(e5_query)
+    
+    norms = np.linalg.norm(doc_embeddings, axis=1)
+    query_norm = np.linalg.norm(query_embedding)
+    dense_scores = np.dot(doc_embeddings, query_embedding) / (norms * query_norm + 1e-10)
+    
+    if bm25_scores.max() > bm25_scores.min():
+        bm25_norm = (bm25_scores - bm25_scores.min()) / (bm25_scores.max() - bm25_scores.min())
+    else:
+        bm25_norm = np.zeros_like(bm25_scores)
+        
+    if dense_scores.max() > dense_scores.min():
+        dense_norm = (dense_scores - dense_scores.min()) / (dense_scores.max() - dense_scores.min())
+    else:
+        dense_norm = np.zeros_like(dense_scores)
+        
+    hybrid_scores = (1.0 - alpha) * bm25_norm + alpha * dense_norm
+    
+    ranked_indices = np.argsort(hybrid_scores)[::-1]
 
-    ranked_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+    if len(ranked_indices) == 0 or hybrid_scores[ranked_indices[0]] == 0:
+        print("No matches found.")
+        return []
+
+    top_score = hybrid_scores[ranked_indices[0]]
+    dynamic_k = min_k
+    
+    for i in range(min_k, min(len(ranked_indices), max_k)):
+        if hybrid_scores[ranked_indices[i]] >= (top_score * score_threshold_ratio):
+            dynamic_k += 1
+        else:
+            break
+
+    print(f"Hybrid Search selected {dynamic_k} result(s) based on Weighted Fusion.")
 
     results = []
-
-    for idx in ranked_indices[:top_k]:
+    for idx in ranked_indices[:dynamic_k]:
         results.append(metadata[idx])
 
     return results
+
+def clean_match_events(raw_text):
+    if "أهم أحداث المباراة:" not in raw_text:
+        return raw_text
+    
+    main_info, events_part = raw_text.split("أهم أحداث المباراة:", 1)
+    events_list = [event.strip() for event in events_part.split("|") if event.strip()]
+    short_events = " | ".join(events_list[:3])
+    clean_text = f"{main_info.strip()} أبرز التبديلات والتكتيكات: {short_events} (بالإضافة إلى تغييرات أخرى لم نذكرها)."
+    
+    return clean_text
 
 def build_context(results, max_chars=8000):
     context_parts = []
 
     for i, r in enumerate(results):
+        cleaned_details = clean_match_events(r['text'])
+        
         block = f"""
 مباراة {i+1}:
 الفرق: {r['team_a']} ضد {r['team_b']}
@@ -95,7 +147,7 @@ def build_context(results, max_chars=8000):
 التاريخ: {r['date']}
 الوقت: {r['time']}
 التفاصيل:
-{r['text']}
+{cleaned_details}
 الرابط: {r['url']}
 -------------------------
 """
@@ -103,58 +155,53 @@ def build_context(results, max_chars=8000):
 
     context = "\n".join(context_parts)
 
-    # 🔥 protect token limit
     if len(context) > max_chars:
         context = context[:max_chars]
 
     return context
 
-
-# -----------------------------
-# RAG WITH GROQ (UPDATED)
-# -----------------------------
-def run_rag_groq(query, bm25, metadata):
-    print("Retrieving relevant matches...")
-    results = retrieve_candidates(query, bm25, metadata, top_k=10)
+def run_rag_groq(query, bm25, doc_embeddings, metadata, embedding_model):
+    print("Retrieving relevant matches via Hybrid Search...")
+    results = retrieve_candidates_hybrid(query, bm25, doc_embeddings, metadata, embedding_model, min_k=1, max_k=5, score_threshold_ratio=0.75)
 
     context = build_context(results)
 
     print("Generating answer with Groq...")
 
-
-    # Get current date in a readable format
     today_str = datetime.now().strftime("%Y-%m-%d")
 
-    # Inject the date into the system message
     system_msg = f"""
-أنت روبوت محادثة رياضي مبهج وحماسي، تعمل كمعلق تلفزيوني ومحلل بيانات في نفس الوقت. التزم حصرياً بالمعلومات الواردة في "السياق" المرفق.
+أنت صحفي رياضي محترف ومعلق تلفزيوني وراوي قصص بارع. مهمتك الأساسية هي تحليل وتقديم المعلومات الرياضية استناداً حصرياً إلى "السياق" (Context) المرفق.
 
-قواعد النبرة والبيانات:
-1. النبرة: حماسية ومبهجة، تحدث مع المستخدم مباشرة (مثل "يا بطل"، "يا صديقي")، وبدون استخدام إيموجي نهائياً.
-2. توفر البيانات: لا تقل "لا توجد معلومات" إلا إذا كان السياق فارغاً تماماً.
-3. البطولة: استخرج اسم الدوري من الرابط وترجمه للعربية.
-4. شمولية التفاصيل: عند سرد المباريات، اذكر (الفرق، البطولة، التاريخ، الوقت، النتيجة، كل الأهداف، وكل الأحداث الهامة) بلا استثناء.
+القاعدة الذهبية (The Golden Rule):
+يجب عليك التمييز بين التحيات البسيطة والأسئلة الرياضية. إذا قام المستخدم بالتحية فقط (مثل: "أهلاً"، "صباح الخير")، رد بتحية حماسية وودودة دون سرد أي مباريات، واسأله عن المباراة أو الفريق الذي يريد البحث عنه.
 
-تحليل نوع الطلب (مسار الإجابة):
-- المسار الأول (الأسئلة التحليلية والمحددة): إذا سأل المستخدم سؤالاً محدداً (مثل: "من سجل في مباراة كذا؟"، "ما تفاصيل مباراة فريق كذا؟"، أو "كم مرة تواجه الفريقان؟")، أجب بأسلوب سردي طبيعي ومباشر كأنك محلل رياضي يرد على سؤاله بناءً على "السياق" فقط، وتجاهل تنسيق القائمة الإلزامي.
-- المسار الثاني (طلبات استعراض المباريات): إذا كان الطلب عاماً (مثل: "مباريات اليوم"، "ما هي أحدث المباريات؟")، استخدم **قواعد التنسيق الصارمة** الخاصة بالمعالجة البرمجية.
+قيود النطاق:
+إذا كان سؤال المستخدم لا يتعلق بكرة القدم أو الرياضة نهائياً، يجب عليك إيقاف عملية البحث فوراً والانتقال إلى "المسار الثالث"، حتى لو كان هناك "سياق" مرفق. لا تحاول ربط المواضيع غير الرياضية بالرياضة.
 
-قواعد البحث (للمسار الثاني):
-5. تاريخ اليوم هو ({today_str}). ابحث عن المباراة الأقرب لهذا التاريخ إن لم يحدد المستخدم.
-6. إذا لم تتطابق أي مباراة، اقترح (3-5) مباريات من السياق.
+القيود الصارمة:
+1. السرد الطبيعي: يُمنع منعاً باتاً استخدام الرموز البرمجية أو الأقواس (مثل: [] أو {{}} أو | أو - أو *). استخدم لغة سردية متصلة.
+2. استخدام الألقاب: استخدم عبارة "يا بطل" أو "يا صديقي" مرة واحدة فقط في الإجابة.
+3. خلو الإجابة من الإيموجي: لا تستخدم أي رموز تعبيرية نهائياً.
 
-قواعد التنسيق الصارمة (لأغراض المعالجة البرمجية Parsing - للمسار الثاني فقط):
-- ممنوع كتابة أي مقدمات قبل القائمة. ابدأ الإجابة مباشرة بعلامة النجمة (*).
-- يجب أن تُكتب كل مباراة كنقطة واحدة مستقلة تبدأ بعلامة (*).
-- يمنع تماماً استخدام فواصل الأسطر (Line breaks / Enter) أو القوائم المتداخلة داخل النقطة الخاصة بالمباراة. يجب أن تكون كل نقطة عبارة عن سطر/فقرة متصلة.
-- النموذج الإلزامي لكل نقطة مباراة:
-* تفاصيل المواجهة: التقى [الفريق أ] ضد [الفريق ب] ضمن منافسات [اسم البطولة] بتاريخ [التاريخ] الساعة [الوقت]، وانتهت المواجهة بنتيجة [النتيجة]، سجل الأهداف: [اللاعب] لصالح [الفريق] في الدقيقة [الدقيقة] (تُكرر لكل هدف)، وأبرز الأحداث: [الحدث] للاعب [اللاعب] في الدقيقة [الدقيقة] (تُكرر لكل حدث).
+مسارات الإجابة (اختر مساراً واحداً فقط ولا تدمج بينهم أبداً):
 
-الرسالة الختامية (إلزامي لكل المسارات):
-- اكتب رسالة ترحيبية/ختامية حماسية واحدة فقط (مثل: "أتمنى لك مشاهدة ممتعة يا بطل!" أو "هذه كانت تغطيتنا يا صديقي!") في سطر نصي عادي مستقل (بدون علامة النجمة *) بعد انتهاء إجابتك أو قائمتك، وقبل المصادر مباشرة.
+المسار الأول: الأسئلة الرياضية التحليلية أو المحددة
+- الفقرة الأولى: ترحيب قصير، ثم ذكر (الفرق، البطولة، التاريخ، والنتيجة النهائية).
+- الفقرة الثانية: سرد قصة الأهداف بالتفصيل (اسم الهداف والدقيقة) لكل الأهداف الموجودة في السياق بلا استثناء.
+- الفقرة الثالثة: تلخيص التبديلات التكتيكية (اذكر أهم تبديلين فقط لتجنب الملل).
+
+المسار الثاني: طلبات استعراض جدول المباريات العام
+- تاريخ اليوم هو ({today_str}). ابحث عن أقرب المباريات لهذا التاريخ.
+- اكتب كل مباراة كفقرة واحدة متصلة بأسلوب: "المباراة الأولى: التقى فريق كذا ضد فريق كذا...".
+
+المسار الثالث (خارج نطاق الرياضة): إذا كان السؤال ليس له علاقة بالرياضة
+- رد باختصار شديد على رسالة المستخدم، ثم وضح تخصصك الرياضي واطلب منه تحديد المهمة الرياضية المطلوبة.
+- الخاتمة الإلزامية: "أنصحك بسؤالي عن أحدث الأخبار الرياضية أو تفاصيل المباريات الأخيرة يا صديقي!".
 
 المصادر:
-- اجمع الروابط في النهاية تحت عنوان "المصادر:" بحيث يكون كل رابط في سطر منفصل.
+- للمسارين الأول والثاني فقط: اذكر الروابط تحت عنوان "المصادر:" في النهاية.
+- للمسار الثالث: لا تذكر أي مصادر.
 """
 
     user_msg = f"""
@@ -181,14 +228,16 @@ def run_rag_groq(query, bm25, metadata):
 
 if __name__ == "__main__":
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-
     input_file = os.path.join(base_dir, 'embedding', 'output', 'embedded_data.json')
 
-    bm25, metadata = build_bm25_index(input_file)
+    print("Loading Embedding Model...")
+    embedding_model = SentenceTransformer('intfloat/multilingual-e5-base')
+
+    bm25, doc_embeddings, metadata = build_hybrid_index(input_file)
 
     query = "مين سجل في ماتش بشكتاش"
 
-    answer = run_rag_groq(query, bm25, metadata)
+    answer = run_rag_groq(query, bm25, doc_embeddings, metadata, embedding_model)
 
     print("\n🤖 ANSWER:\n", answer)
 

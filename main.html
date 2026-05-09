@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The E-JUST Soccer Tracker</title>
+    <!-- Add Website Favicon -->
+    <link rel="icon" href="legacy/ui/textures/ej.png" type="image/png">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        heading: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            400: '#ef4444', // Light Red
+                            500: '#f22a30', // Brand Red
+                            600: '#dc2626', // Dark Red
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Light Theme w/ Field Background */
+        body {
+            margin: 0;
+            background-color: #4e8663; /* Dark green fallback */
+            background-image: url('legacy/ui/textures/pitch_field.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            color: #0f172a; /* Slate 900 for Light Theme */
+        }
+
+        /* Glassmorphism Utilities - Light Theme */
+        .glass {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+        }
+
+        .glass-card {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.6) 100%);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            border-top: 1px solid rgba(255, 255, 255, 1);
+            border-left: 1px solid rgba(255, 255, 255, 1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(239, 68, 68, 0.2);
+            border-color: rgba(239, 68, 68, 0.4);
+        }
+
+        /* Custom Scrollbar */
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.05); 
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(0,0,0,0.2); 
+            border-radius: 10px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(0,0,0,0.3); 
+        }
+
+        /* Streamlit style chat bubbles - Light Theme */
+        .chat-bubble-ai {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            color: #0f172a;
+        }
+        .chat-bubble-user {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #0f172a;
+        }
+        
+        /* Blinking cursor for loading */
+        .typing-indicator span {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: #ef4444;
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col font-sans">
+
+    <!-- Navbar -->
+    <nav class="glass fixed w-full z-50 top-0 transition-all duration-300 py-4">
+        <div class="max-w-7xl mx-auto px-6 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <img src="legacy/ui/textures/ej.png" alt="E-JUST Logo" class="w-10 h-10 object-contain drop-shadow-md" onerror="this.outerHTML='<div class=\'w-10 h-10 rounded-full bg-gradient-to-br from-brand-400 to-white-600 flex items-center justify-center shadow-lg shadow-brand-500/30\'><i data-lucide=\'activity\' class=\'text-white w-5 h-5\'></i></div>'">
+                <span class="font-heading font-bold text-xl tracking-tight text-slate-900">Egypt-Japan University of Science and Technology </span>
+            </div>
+            <div class="hidden md:flex gap-8 text-sm font-medium text-slate-800">
+                <a href="#chatbot" class="hover:text-brand-500 transition-colors bg-white/50 px-3 py-1 rounded-full border border-white">Sports Chatbot</a>
+                <a href="#features" class="hover:text-brand-500 transition-colors bg-white/50 px-3 py-1 rounded-full border border-white">Features</a>
+                <a href="#feedback" class="hover:text-brand-500 transition-colors bg-white/50 px-3 py-1 rounded-full border border-white">Feedback</a>
+            </div>
+            <a href="#chatbot" class="bg-brand-500 hover:bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-full transition-all duration-300 text-sm shadow-[0_0_15px_rgba(239,68,68,0.4)] border border-brand-400">
+                Try it Now
+            </a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="pt-40 pb-20 px-6 text-center relative overflow-hidden">
+        <div class="absolute inset-0 z-0">
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-white/40 blur-[100px] rounded-full pointer-events-none"></div>
+        </div>
+        
+        <div class="max-w-4xl mx-auto relative z-10">
+            <div class="flex justify-center">
+                <img src="legacy/ui/textures/ejust_ball.png" alt="Bouncy Soccer Ball" class="w-60 h-60 animate-bounce drop-shadow-2xl" onerror="this.outerHTML='<span class=\'text-8xl animate-bounce drop-shadow-2xl inline-block\'>⚽</span>'">
+            </div>
+            
+        <h1 class="font-heading text-5xl md:text-7xl font-bold leading-tight mb-6 text-slate-900 drop-shadow-sm">
+            <span style="text-shadow: -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 2px 0 #fff;">
+                Your Ultimate AI-Powered
+            </span> 
+            <br>
+            <span class="text-brand-500" style="text-shadow: -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 2px 0 #fff;">
+                Egyptian Sports
+            </span> 
+            <span style="text-shadow: -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 2px 0 #fff;">
+                Companion.
+            </span>
+        </h1>
+            
+            <p class="text-lg md:text-xl text-slate-800 mb-10 max-w-2xl mx-auto font-bold leading-relaxed drop-shadow-sm bg-white/60 p-4 rounded-2xl backdrop-blur-sm border border-white/50 shadow-sm">
+                Experience the future of sports analytics. Chat with our intelligent agent to instantly query matches, analyze historical data, and track real-time tactical events in the Egyptian League and International Competitions.
+            </p>
+            
+            <div class="flex flex-col sm:flex-row justify-center gap-4">
+                <a href="#chatbot" class="bg-brand-500 hover:bg-brand-600 text-white font-bold px-8 py-4 rounded-full transition-all duration-300 flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:shadow-[0_0_30px_rgba(239,68,68,0.5)] border border-brand-400">
+                    <i data-lucide="message-square-check" class="w-5 h-5"></i>
+                    Ask Our AI Analyst!
+                </a>
+                <a href="#features" class="glass hover:bg-white/90 text-slate-900 font-bold px-8 py-4 rounded-full transition-all duration-300 flex items-center justify-center gap-2 border border-white shadow-sm">
+                    Explore Features!
+                </a>
+            </div>
+
+            <div class="inline-flex items-center gap-2 px-4 py-2 mt-10 rounded-full glass border-brand-500/30 text-brand-600 text-sm font-bold shadow-sm">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-500 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-brand-600"></span>
+                </span>
+                Status: Online - Ask about Egyptian League Matches!
+            </div>
+        </div>
+    </section>
+
+    <!-- Chatbot Section (Backend RAG connected) -->
+    <section id="chatbot" class="px-6 relative z-10">
+        <div class="max-w-4xl mx-auto">
+            <div class="block w-fit mx-auto text-center mb-10 bg-white/70 backdrop-blur-md py-4 px-6 rounded-2xl border border-white/50 shadow-sm">
+                <h2 class="font-heading text-3xl font-bold text-slate-900 mb-2">Live Database Analyst (RAG)</h2>
+                <p class="text-slate-700 font-bold">Ask about historical matches or specific data from our custom vector database.</p>
+            </div>
+
+            <!-- Chat Interface -->
+            <div class="glass rounded-2xl overflow-hidden flex flex-col h-[600px] border border-white/80 shadow-2xl">
+                <!-- Chat Header -->
+                <div class="bg-white/80 p-4 border-b border-slate-200 flex justify-between items-center px-6">
+                    <div class="flex items-center gap-3">
+                        <div class="relative">
+                            <img src="legacy/ui/textures/ej.png" alt="AI Bot" class="w-10 h-10 rounded-full shadow-md object-cover bg-white border border-slate-200" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=AI&background=ef4444&color=fff&rounded=true';">
+                            <div class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-slate-900 font-heading">E-JUSTian</h3>
+                            <p class="text-xs text-brand-600 font-bold">Hybrid Search + Local FastAPI Active</p>
+                        </div>
+                    </div>
+                    <button class="text-slate-500 hover:text-brand-500 transition-colors bg-slate-100 hover:bg-red-50 p-2 rounded-full border border-slate-200" onclick="clearChat()">
+                        <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <!-- Chat Messages Area -->
+                <div id="chat-container" class="flex-1 overflow-y-auto p-6 space-y-6 custom-scroll bg-slate-50/70">
+                    <!-- Initial AI Message -->
+                    <div class="flex gap-4 max-w-[85%]">
+                        <img src="legacy/ui/textures/ej.png" alt="AI Bot" class="w-8 h-8 rounded-full shadow-md flex-shrink-0 object-cover bg-white border border-slate-200" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=AI&background=ef4444&color=fff&rounded=true';">
+                        <div class="chat-bubble-ai rounded-2xl rounded-tl-none p-4 shadow-md text-slate-800 font-medium border border-slate-200">
+                            <p>أهلاً بك يا بطل! أنا المحلل الرياضي الخاص بك. اسألني عن أي تفاصيل، إحصائيات، أو أحداث لمباريات الدوري المصري وسأجيبك فوراً من قاعدة بياناتنا المحدثة.</p>
+                            <p class="mt-2 text-sm text-slate-600 bg-slate-100 p-2 rounded-lg inline-block border border-slate-200">Try asking: "مين سجل في ماتش الأهلي والزمالك؟"</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Input Area -->
+                <div class="p-4 bg-white/90 border-t border-slate-200">
+                    <form id="chat-form" class="relative max-w-3xl mx-auto flex items-end gap-2">
+                        <button type="submit" id="send-btn" class="h-12 w-12 bg-brand-500 hover:bg-brand-600 rounded-xl flex items-center justify-center text-white shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 border border-brand-400">
+                            <i data-lucide="send" class="w-5 h-5"></i>
+                        </button>
+                        <div class="relative flex-1 bg-white border border-slate-300 rounded-xl overflow-hidden focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20 transition-all shadow-sm">
+                            <textarea id="chat-input" dir="rtl" rows="1" class="w-full bg-transparent text-slate-900 px-4 py-3 placeholder-slate-400 outline-none resize-none custom-scroll max-h-32 min-h-[48px]" placeholder="إسألني عن أي تفاصيل..."></textarea>
+                        </div>
+                    </form>
+                    <div class="text-center mt-2">
+                        <p class="text-[10px] text-slate-500 font-bold bg-white/50 px-2 py-0.5 rounded-full inline-block">API Endpoint: http://localhost:8000/query</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-20 px-6 relative z-10">
+        <div class="max-w-7xl mx-auto">
+            <div class="block w-fit mx-auto text-center mb-16 bg-white/80 backdrop-blur-md py-6 px-8 rounded-3xl border border-white/60 shadow-sm">
+                <h2 class="font-heading text-3xl md:text-4xl font-bold text-slate-900 mb-4">Unmatched Analytical Power</h2>
+                <p class="text-slate-700 font-bold max-w-2xl mx-auto">Built for fans and analysts alike. Discover how our hybrid architecture delivers precision sports data instantly.</p>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Feature 1 -->
+                <div class="glass-card p-8 rounded-2xl flex flex-col h-full bg-white/95">
+                    <div class="w-14 h-14 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-center mb-6 text-blue-600 shadow-sm">
+                        <i data-lucide="bot" class="w-7 h-7"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-4 font-heading">AI Conversational Chat</h3>
+                    <p class="text-slate-600 mb-6 flex-grow font-medium">Experience conversational data retrieval. Ask the AI anything using natural Arabic prompts.</p>
+                    <ul class="space-y-3">
+                        <li class="flex items-start gap-3 text-sm text-slate-700">
+                            <i data-lucide="check-circle-2" class="w-5 h-5 text-brand-500 shrink-0"></i>
+                            <span class="font-medium">Natural, context-aware responses formatted like a sports commentary.</span>
+                        </li>
+                        <li class="flex items-start gap-3 text-sm text-slate-700">
+                            <i data-lucide="check-circle-2" class="w-5 h-5 text-brand-500 shrink-0"></i>
+                            <span class="font-medium">Understands complex queries about goals, substitutions, and tactics.</span>
+                        </li>
+                        <li class="flex items-start gap-3 text-sm text-slate-700">
+                            <i data-lucide="check-circle-2" class="w-5 h-5 text-brand-500 shrink-0"></i>
+                            <span class="font-medium">Powered by lightning-fast LLM APIs.</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="glass-card p-8 rounded-2xl flex flex-col h-full bg-white/95">
+                    <div class="w-14 h-14 bg-purple-50 border border-purple-200 rounded-xl flex items-center justify-center mb-6 text-purple-600 shadow-sm">
+                        <i data-lucide="search" class="w-7 h-7"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-4 font-heading">Advanced Smart Search</h3>
+                    <p class="text-slate-600 mb-6 flex-grow font-medium">Our proprietary hybrid search ensures you find the exact match, regardless of spelling or query structure.</p>
+                    <ul class="space-y-3">
+                        <li class="flex items-start gap-3 text-sm text-slate-700">
+                            <i data-lucide="check-circle-2" class="w-5 h-5 text-brand-500 shrink-0"></i>
+                            <span class="font-medium">BM25 Sparse Lexical search for exact team and player name matching.</span>
+                        </li>
+                        <li class="flex items-start gap-3 text-sm text-slate-700">
+                            <i data-lucide="check-circle-2" class="w-5 h-5 text-brand-500 shrink-0"></i>
+                            <span class="font-medium">E5 Multilingual Dense Embeddings for deep semantic understanding.</span>
+                        </li>
+                        <li class="flex items-start gap-3 text-sm text-slate-700">
+                            <i data-lucide="check-circle-2" class="w-5 h-5 text-brand-500 shrink-0"></i>
+                            <span class="font-medium">Reciprocal Rank Fusion (RRF) with Dynamic K drop-off filtering.</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="glass-card p-8 rounded-2xl flex flex-col h-full bg-white/95">
+                    <div class="w-14 h-14 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-center mb-6 shadow-sm">
+                        <i data-lucide="line-chart" class="w-7 h-7 text-emerald-600"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-4 font-heading">Comprehensive Match Insights</h3>
+                    <p class="text-slate-600 mb-6 flex-grow font-medium">Get more than just the final score. Dive deep into the tactical timeline of every fixture.</p>
+                    <ul class="space-y-3">
+                        <li class="flex items-start gap-3 text-sm text-slate-700">
+                            <i data-lucide="check-circle-2" class="w-5 h-5 text-brand-500 shrink-0"></i>
+                            <span class="font-medium">Minute-by-minute tracking of critical events and substitutions.</span>
+                        </li>
+                        <li class="flex items-start gap-3 text-sm text-slate-700">
+                            <i data-lucide="check-circle-2" class="w-5 h-5 text-brand-500 shrink-0"></i>
+                            <span class="font-medium">Automated timeline cleaning to prevent data redundancy and hallucinations.</span>
+                        </li>
+                        <li class="flex items-start gap-3 text-sm text-slate-700">
+                            <i data-lucide="check-circle-2" class="w-5 h-5 text-brand-500 shrink-0"></i>
+                            <span class="font-medium">Direct source URLs provided for verifiable match reporting.</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Bottom Section: Countdown & Feedback -->
+    <section class="py-20 px-6 relative z-10 bg-white/70 border-t border-white/80 backdrop-blur-xl">
+        <div class="max-w-7xl mx-auto grid md:grid-cols-2 gap-12 items-center">
+            
+            <!-- Countdown Timer -->
+            <div class="glass-card p-10 rounded-3xl text-center relative overflow-hidden group bg-white/95">
+                <div class="absolute inset-0 bg-brand-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                <h3 class="text-2xl font-bold text-slate-900 mb-2 font-heading">Next API Data Update</h3>
+                <p class="text-slate-600 mb-8 font-bold">Our Scrapy spider runs daily at midnight to embed the latest fixtures into the vector database.</p>
+                
+                <div class="flex justify-center gap-4 text-slate-900">
+                    <div class="flex flex-col items-center">
+                        <div class="w-20 h-20 bg-white border border-slate-200 rounded-2xl flex items-center justify-center text-3xl font-bold text-brand-600 font-heading shadow-sm" id="cd-hours">00</div>
+                        <span class="text-xs text-slate-600 mt-2 uppercase tracking-wider font-bold">Hours</span>
+                    </div>
+                    <div class="text-4xl font-light text-slate-400 mt-4">:</div>
+                    <div class="flex flex-col items-center">
+                        <div class="w-20 h-20 bg-white border border-slate-200 rounded-2xl flex items-center justify-center text-3xl font-bold text-brand-600 font-heading shadow-sm" id="cd-minutes">00</div>
+                        <span class="text-xs text-slate-600 mt-2 uppercase tracking-wider font-bold">Mins</span>
+                    </div>
+                    <div class="text-4xl font-light text-slate-400 mt-4">:</div>
+                    <div class="flex flex-col items-center">
+                        <div class="w-20 h-20 bg-white border border-slate-200 rounded-2xl flex items-center justify-center text-3xl font-bold text-brand-600 font-heading shadow-sm" id="cd-seconds">00</div>
+                        <span class="text-xs text-slate-600 mt-2 uppercase tracking-wider font-bold">Secs</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feedback Form -->
+            <div id="feedback" class="glass-card p-10 rounded-3xl bg-white/95">
+                <h3 class="text-2xl font-bold text-slate-900 mb-2 font-heading">Help Us Improve</h3>
+                <p class="text-slate-600 mb-6 text-sm font-bold">Have feedback on the AI's responses or search accuracy? Let the developer know directly.</p>
+                
+                <form action="mailto:yousef.gomaa@ejust.edu.eg" method="POST" enctype="text/plain" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold text-slate-800 mb-1">Your Name</label>
+                        <input type="text" name="name" required class="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all shadow-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-slate-800 mb-1">Feedback / Issue</label>
+                        <textarea name="feedback" rows="4" required class="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all shadow-sm resize-none"></textarea>
+                    </div>
+                    <button type="submit" class="w-full bg-slate-900 text-white font-bold py-3 rounded-xl hover:bg-brand-600 transition-colors flex justify-center items-center gap-2 shadow-md border border-slate-800">
+                        <i data-lucide="mail" class="w-4 h-4"></i>
+                        Send Feedback to Developer
+                    </button>
+                    <p class="text-xs text-center text-slate-600 mt-3 font-bold bg-white/50 px-2 py-0.5 rounded-full inline-block w-full">Directs to yousef.gomaa@ejust.edu.eg</p>
+                </form>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/60 bg-white/90 backdrop-blur-xl py-8 relative z-10 text-center shadow-inner">
+        <p class="text-slate-700 text-sm font-bold">
+            &copy; 2026. Website Question Answering (QA). Developed by Yousef Gomaa for for Natural Language Processing Project 1.
+        </p>
+    </footer>
+
+    <!-- Scripts -->
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // -----------------------------------------------------
+        // Chatbot Logic (Connecting to FastAPI Backend)
+        // -----------------------------------------------------
+        const chatContainer = document.getElementById('chat-container');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('send-btn');
+        
+        // Replace this with your actual backend URL if hosted elsewhere
+        const API_URL = 'http://localhost:8000/query';
+
+        // Auto-resize textarea
+        chatInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+            if(this.value.trim() === '') {
+                sendBtn.disabled = true;
+            } else {
+                sendBtn.disabled = false;
+            }
+        });
+
+        chatInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if(this.value.trim() !== '') {
+                    chatForm.requestSubmit();
+                }
+            }
+        });
+
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const query = chatInput.value.trim();
+            if (!query) return;
+
+            chatInput.value = '';
+            chatInput.style.height = '48px';
+            sendBtn.disabled = true;
+
+            appendMessage('user', query);
+            const loadingId = appendLoading();
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query })
+                });
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                const data = await response.json();
+                document.getElementById(loadingId).remove();
+                appendMessage('ai', data.answer, data.sources);
+
+            } catch (error) {
+                console.error("Fetch error:", error);
+                const loader = document.getElementById(loadingId);
+                if (loader) loader.remove();
+                appendMessage('ai', "عذراً يا صديقي، السيرفر غير متصل.", []);
+            }
+        });
+
+        function appendMessage(sender, text, sources = []) {
+            const wrapperDiv = document.createElement('div');
+            wrapperDiv.className = `flex gap-4 max-w-[85%] mb-4 ${sender === 'user' ? 'ml-auto flex-row-reverse' : ''}`;
+            
+            const avatarHtml = `<img src="legacy/ui/textures/ej.png" alt="${sender}" class="w-8 h-8 rounded-full shadow-md flex-shrink-0 object-cover bg-white border border-slate-200" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${sender === 'user' ? 'U' : 'AI'}&background=ef4444&color=fff&rounded=true';">`;
+
+            const bubbleClass = sender === 'user' 
+                ? 'chat-bubble-user rounded-tr-none text-slate-900 font-medium shadow-sm' 
+                : 'chat-bubble-ai rounded-tl-none text-slate-800 font-medium shadow-md border border-slate-200 bg-white';
+
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            const extractedUrls = text.match(urlRegex) || [];
+            const cleanedUrls = [...new Set(extractedUrls.map(u => u.replace(/[.,")]+$/, '')))];
+
+            const sourceHeaderRegex = /\n?\*?\*?(المصادر|مصادر|المراجع|Sources|References):?[\s\S]*/i;
+            let cleanAnswer = text.split(sourceHeaderRegex)[0].trim();
+            cleanAnswer = cleanAnswer.replace(urlRegex, '').replace(/[-\s]+$/, '').trim();
+            
+            const formattedText = cleanAnswer.replace(/\n/g, '<br>');
+
+            let sourcesHtml = '';
+            if (cleanedUrls.length > 0) {
+                const MAX_URL_LENGTH = 50;
+
+                sourcesHtml = `
+                    <div class="mt-3 pt-3 border-t border-slate-200 text-xs">
+                        <span class="font-bold text-brand-600 mb-2 block">📚 المصادر المذكورة:</span>
+                        <div class="flex flex-col gap-1">
+                            ${cleanedUrls.map(url => {
+                                const displayUrl = url.length > MAX_URL_LENGTH 
+                                    ? url.substring(0, MAX_URL_LENGTH) + '...' 
+                                    : url;
+
+                                return `
+                                <a href="${url}" target="_blank" title="${url}" class="text-blue-600 hover:underline block dir-ltr text-left">
+                                    - ${displayUrl}
+                                </a>`;
+                            }).join('')}
+                        </div>
+                    </div>`;
+            }
+
+            wrapperDiv.innerHTML = `
+                ${avatarHtml}
+                <div class="rounded-2xl p-4 ${bubbleClass}" dir="rtl">
+                    <div class="leading-relaxed text-sm">${formattedText}</div>
+                    ${sourcesHtml}
+                </div>
+            `;
+            
+            chatContainer.appendChild(wrapperDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            if(window.lucide) lucide.createIcons();
+        }
+
+        function appendLoading() {
+            const id = 'loading-' + Date.now();
+            const wrapperDiv = document.createElement('div');
+            wrapperDiv.id = id;
+            wrapperDiv.className = `flex gap-4 max-w-[85%]`;
+            wrapperDiv.innerHTML = `
+                <img src="legacy/ui/textures/ej.png" alt="AI Bot" class="w-8 h-8 rounded-full shadow-md flex-shrink-0 object-cover bg-white border border-slate-200" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=AI&background=ef4444&color=fff&rounded=true';">
+                <div class="chat-bubble-ai rounded-2xl rounded-tl-none p-4 px-5 shadow-md text-slate-800 border border-slate-200 flex items-center h-[44px]">
+                    <div class="typing-indicator">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            `;
+            chatContainer.appendChild(wrapperDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return id;
+        }
+
+        function clearChat() {
+            // Keep the first welcome message
+            const firstChild = chatContainer.firstElementChild;
+            chatContainer.innerHTML = '';
+            if (firstChild) chatContainer.appendChild(firstChild);
+        }
+
+        // -----------------------------------------------------
+        // Countdown Timer Logic (To Next Midnight)
+        // -----------------------------------------------------
+        function updateTimer() {
+            const now = new Date();
+            const tomorrow = new Date(now);
+            tomorrow.setHours(24, 0, 0, 0); // Next midnight
+            
+            const diffMs = tomorrow - now;
+            
+            const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+            document.getElementById('cd-hours').textContent = hours.toString().padStart(2, '0');
+            document.getElementById('cd-minutes').textContent = minutes.toString().padStart(2, '0');
+            document.getElementById('cd-seconds').textContent = seconds.toString().padStart(2, '0');
+        }
+
+        setInterval(updateTimer, 1000);
+        updateTimer(); // Initial call
+        
+    </script>
+</body>
+</html>
