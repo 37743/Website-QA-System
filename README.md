@@ -62,7 +62,7 @@ Generated Answer + Sources
 python api.py
 
 ### 2. Launch UI
-streamlit run ui.py
+Access the GUI via the "main.html" file.
 
 Then ask:
 
